@@ -1,0 +1,67 @@
+# ======================================================================
+# Oracle → PostgreSQL Migration Tool - Docker Compose
+# ======================================================================
+# Services:
+#   migration : Runs the migration CLI tool
+#   test      : Runs the test suite (39 tests)
+#   postgres  : PostgreSQL instance for verifying converted SQL
+# ======================================================================
+
+services:
+  # ------------------------------------------------------------------
+  # Migration service - converts Oracle SQL to PostgreSQL
+  # ------------------------------------------------------------------
+  migration:
+    build:
+      context: .
+      target: base
+    volumes:
+      - ./samples:/app/input:ro        # Oracle SQL input (read-only)
+      - ./output:/app/output           # PostgreSQL output
+      - ./logs:/app/logs               # Migration logs
+      - ./config.yaml:/app/config.yaml:ro
+    command:
+      - "-i"
+      - "/app/input"
+      - "-o"
+      - "/app/output"
+      - "-c"
+      - "/app/config.yaml"
+      - "--lang"
+      - "ja"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ------------------------------------------------------------------
+  # Test runner - executes the full test suite
+  # ------------------------------------------------------------------
+  test:
+    build:
+      context: .
+      target: test
+    volumes:
+      - ./logs:/app/logs
+
+  # ------------------------------------------------------------------
+  # PostgreSQL - for verifying converted SQL output
+  # ------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: migration
+      POSTGRES_PASSWORD: migration
+      POSTGRES_DB: migration_test
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./output:/docker-entrypoint-initdb.d:ro   # Auto-load converted SQL
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U migration"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pgdata:

@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oracle2pg"
+version = "1.0.0"
+description = "AST-based Oracle to PostgreSQL SQL migration tool"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+authors = [
+    {name = "Oracle2PostgreSQL Contributors"},
+]
+keywords = [
+    "oracle",
+    "postgresql",
+    "migration",
+    "sql",
+    "plsql",
+    "database",
+    "converter",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: SQL",
+    "Topic :: Database",
+    "Topic :: Database :: Front-Ends",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Utilities",
+]
+
+dependencies = [
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+build = [
+    "pyinstaller>=6.0",
+]
+
+[project.scripts]
+oracle2pg = "main:main"
+
+[project.urls]
+Homepage = "https://github.com/oracle2pg/Oracle2PostgreSQL"
+Repository = "https://github.com/oracle2pg/Oracle2PostgreSQL"
+Issues = "https://github.com/oracle2pg/Oracle2PostgreSQL/issues"
+
+[tool.setuptools]
+py-modules = ["main"]
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["."]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["test_*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
