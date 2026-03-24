@@ -1,0 +1,2 @@
+[console_scripts]
+oracle2pg = main:main

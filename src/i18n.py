@@ -341,6 +341,15 @@ TRANSLATIONS = {
         "zh_CN": "对象转换",
         "ko": "객체 변환",
     },
+    "config_file": {
+        "en": "Config File:",
+        "ja": "設定ファイル:",
+        "zh_CN": "配置文件:",
+        "ko": "설정 파일:",
+        "fr": "Fichier de configuration :",
+        "de": "Konfigurationsdatei:",
+        "es": "Archivo de configuración:",
+    },
 }
 
 
@@ -362,6 +371,10 @@ class I18n:
             except (KeyError, IndexError):
                 pass
         return text
+
+    def has_key(self, key: str) -> bool:
+        """Check if a translation key exists."""
+        return key in TRANSLATIONS
 
     def set_language(self, lang_code: str):
         """Change the current language."""

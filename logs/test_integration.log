@@ -1,0 +1,9 @@
+[2026-03-24 18:53:54][INFO   ][integration_test] ============================================================
+[2026-03-24 18:53:54][INFO   ][integration_test] Migration started  |  files=3
+[2026-03-24 18:53:54][INFO   ][integration_test] ============================================================
+[2026-03-24 18:53:54][INFO   ][integration_test] [PARSE ] test.sql
+[2026-03-24 18:53:54][DEBUG  ][integration_test] [RULE  ] DT_001 (DATATYPE/AUTO) at test.sql:10  →  NUMBER->NUMERIC
+[2026-03-24 18:53:54][WARNING][integration_test] [WARN  ] test.sql:25  Unknown syntax skipped
+[2026-03-24 18:53:54][INFO   ][integration_test] ------------------------------------------------------------
+[2026-03-24 18:53:54][INFO   ][integration_test] Migration complete |  files=3  auto=10  review=2  manual=1
+[2026-03-24 18:53:54][INFO   ][integration_test] ============================================================

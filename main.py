@@ -18,6 +18,8 @@ from src.postgres_transformer import PostgresTransformer, TransformOptions, Tran
 from src.postgres_generator import PostgresCodeGenerator, BackupManager
 from src.report_generator import ReportGenerator
 from src.i18n import I18n, LANGUAGES
+from src.logger import setup_logger, MigrationLogger
+from src.config_loader import load_config, get_default_config, AppConfig
 
 
 # ======================================================================
@@ -26,38 +28,71 @@ from src.i18n import I18n, LANGUAGES
 
 def run_cli(args):
     """Run migration in CLI (headless) mode."""
+    # --- Load configuration ---
+    if args.config and os.path.isfile(args.config):
+        cfg = load_config(args.config)
+    else:
+        cfg = get_default_config()
+
+    # CLI args override config values
+    encoding = args.encoding or cfg.input_encoding
+    extensions = (
+        [e.strip() for e in args.extensions.split(",")]
+        if args.extensions
+        else cfg.file_extensions
+    )
+    lang = args.lang or cfg.language
     input_dir = args.input
     output_dir = args.output
-    encoding = args.encoding or "utf-8"
-    extensions = [e.strip() for e in (args.extensions or ".sql,.pls,.pkb,.pks,.trg,.vw,.fnc,.prc").split(",")]
-    lang = args.lang or "en"
+
+    # --- Setup logger ---
+    log = setup_logger(
+        name="oracle2pg",
+        log_file=cfg.logging.log_file,
+        console_level=cfg.logging.console_level,
+        file_level=cfg.logging.file_level,
+        max_bytes=cfg.logging.max_bytes,
+        backup_count=cfg.logging.backup_count,
+    )
+    mlog = MigrationLogger(log)
 
     i18n = I18n(lang)
 
     if not os.path.isdir(input_dir):
-        print(f"Error: Input directory not found: {input_dir}")
+        mlog.error(f"Input directory not found: {input_dir}")
         sys.exit(1)
 
     os.makedirs(output_dir, exist_ok=True)
 
-    options = TransformOptions(
-        convert_datatypes=not args.no_datatypes,
-        convert_plsql=not args.no_plsql,
-        convert_sequences=not args.no_sequences,
-        convert_synonyms=not args.no_synonyms,
-        convert_packages=not args.no_packages,
-        convert_triggers=not args.no_triggers,
-        generate_report=not args.no_report,
-        create_backup=not args.no_backup,
-        encoding=encoding,
-    )
+    # --- Build TransformOptions (CLI flags override config) ---
+    options = cfg.to_transform_options()
+    if args.no_datatypes:
+        options.convert_datatypes = False
+    if args.no_plsql:
+        options.convert_plsql = False
+    if args.no_sequences:
+        options.convert_sequences = False
+    if args.no_synonyms:
+        options.convert_synonyms = False
+    if args.no_packages:
+        options.convert_packages = False
+    if args.no_triggers:
+        options.convert_triggers = False
+    if args.no_report:
+        options.generate_report = False
+    if args.no_backup:
+        options.create_backup = False
+    options.encoding = encoding
 
     parser = OracleParser(encoding=encoding)
     transformer = PostgresTransformer(options)
-    generator = PostgresCodeGenerator(output_dir, encoding=encoding)
-    backup_mgr = BackupManager() if options.create_backup else None
+    generator = PostgresCodeGenerator(
+        output_dir, encoding=cfg.output_encoding,
+        add_header=cfg.add_header, suffix=cfg.output_suffix,
+    )
+    backup_mgr = BackupManager(cfg.backup_dir) if options.create_backup else None
 
-    results = []
+    # --- Discover files ---
     sql_files = []
     for root, dirs, files in os.walk(input_dir):
         for f in files:
@@ -65,12 +100,11 @@ def run_cli(args):
                 sql_files.append(os.path.join(root, f))
 
     if not sql_files:
-        print(f"No matching files found in {input_dir}")
+        mlog.error(f"No matching files found in {input_dir}")
         sys.exit(1)
 
-    print(i18n.t("log_start"))
-    print(f"  Files found: {len(sql_files)}")
-    print("-" * 60)
+    mlog.start_migration(len(sql_files))
+    results = []
 
     for filepath in sql_files:
         fname = os.path.basename(filepath)
@@ -80,38 +114,41 @@ def run_cli(args):
             backup_mgr.backup(filepath)
 
         # Parse
-        print(i18n.t("log_parsing", file=fname))
+        mlog.start_file(fname)
         schema = parser.parse_file(filepath)
+        for err in schema.errors:
+            mlog.parse_warning(fname, 0, err)
 
         # Transform
-        print(i18n.t("log_transforming", file=fname))
+        mlog.transform_file(fname)
         result = transformer.transform(schema)
 
+        # Log individual rule applications
+        for change in result.changes:
+            mlog.rule_applied(
+                change.rule_id, change.category, change.severity,
+                change.description, fname, change.line_number,
+            )
+
         # Generate
-        print(i18n.t("log_generating", file=fname))
         out_path = generator.generate(result)
+        mlog.generate_file(fname, os.path.basename(out_path))
         results.append(result)
 
-        # Status
-        status = f"  Auto: {result.auto_converted}, Review: {result.needs_review}, Manual: {result.manual_only}"
-        if result.errors:
-            status += f", Errors: {len(result.errors)}"
-        print(status)
+        mlog.file_result(fname, result.auto_converted, result.needs_review, result.manual_only)
 
-    print("-" * 60)
     total_auto = sum(r.auto_converted for r in results)
     total_review = sum(r.needs_review for r in results)
     total_manual = sum(r.manual_only for r in results)
-    print(i18n.t("log_complete",
-                  total=len(results), auto=total_auto,
-                  review=total_review, manual=total_manual))
+    mlog.finish_migration(len(results), total_auto, total_review, total_manual)
 
     # Generate report
     if options.generate_report:
-        report_gen = ReportGenerator(output_dir, lang=lang)
+        report_lang = cfg.report_language or lang
+        report_gen = ReportGenerator(output_dir, lang=report_lang)
         report_paths = report_gen.generate(results)
-        print(f"\nReport: {report_paths['html']}")
-        print(f"CSV:    {report_paths['csv']}")
+        mlog.info(f"Report: {report_paths['html']}")
+        mlog.info(f"CSV:    {report_paths['csv']}")
 
 
 # ======================================================================
@@ -121,12 +158,24 @@ def run_cli(args):
 class Oracle2PostgreSQLApp:
     """Tkinter GUI application for Oracle → PostgreSQL migration."""
 
-    def __init__(self, root: tk.Tk):
+    def __init__(self, root: tk.Tk, cfg: AppConfig = None):
         self.root = root
-        self.i18n = I18n("ja")
+        self.cfg = cfg or get_default_config()
+        self.i18n = I18n(self.cfg.language)
         self._cancel_flag = False
         self._running = False
         self._widgets = {}
+
+        # Setup file logger for GUI mode too
+        self._file_logger = setup_logger(
+            name="oracle2pg.gui",
+            log_file=self.cfg.logging.log_file,
+            console_level="WARNING",  # Don't duplicate to console in GUI mode
+            file_level=self.cfg.logging.file_level,
+            max_bytes=self.cfg.logging.max_bytes,
+            backup_count=self.cfg.logging.backup_count,
+        )
+        self._mlog = MigrationLogger(self._file_logger)
 
         self._setup_window()
         self._create_widgets()
@@ -161,7 +210,7 @@ class Oracle2PostgreSQLApp:
         lang_frame.pack(fill=tk.X, pady=(0, 5))
         self._widgets["lang_label"] = ttk.Label(lang_frame, text="言語:")
         self._widgets["lang_label"].pack(side=tk.LEFT)
-        self.lang_var = tk.StringVar(value="ja - 日本語")
+        self.lang_var = tk.StringVar(value=f"{self.cfg.language} - {LANGUAGES.get(self.cfg.language, '')}")
         lang_names = [f"{code} - {name}" for code, name in LANGUAGES.items()]
         self.lang_combo = ttk.Combobox(lang_frame, textvariable=self.lang_var,
                                         values=lang_names, state="readonly", width=30)
@@ -189,6 +238,17 @@ class Oracle2PostgreSQLApp:
         self._widgets["output_browse"] = ttk.Button(io_frame, text="参照...",
                                                       command=self._browse_output)
         self._widgets["output_browse"].grid(row=1, column=2, pady=2)
+
+        # Config file row
+        self._widgets["config_label"] = ttk.Label(io_frame, text="設定ファイル:")
+        self._widgets["config_label"].grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.config_var = tk.StringVar()
+        self.config_entry = ttk.Entry(io_frame, textvariable=self.config_var, width=60)
+        self.config_entry.grid(row=2, column=1, padx=5, pady=2, sticky=tk.EW)
+        self._widgets["config_browse"] = ttk.Button(io_frame, text="参照...",
+                                                      command=self._browse_config)
+        self._widgets["config_browse"].grid(row=2, column=2, pady=2)
+
         io_frame.columnconfigure(1, weight=1)
 
         # -- Settings row --
@@ -197,7 +257,7 @@ class Oracle2PostgreSQLApp:
 
         self._widgets["encoding_label"] = ttk.Label(settings_frame, text="エンコーディング:")
         self._widgets["encoding_label"].pack(side=tk.LEFT)
-        self.encoding_var = tk.StringVar(value="utf-8")
+        self.encoding_var = tk.StringVar(value=self.cfg.input_encoding)
         enc_combo = ttk.Combobox(settings_frame, textvariable=self.encoding_var,
                                   values=["utf-8", "shift_jis", "euc-jp", "iso-8859-1",
                                           "cp1252", "latin1"],
@@ -206,7 +266,7 @@ class Oracle2PostgreSQLApp:
 
         self._widgets["ext_label"] = ttk.Label(settings_frame, text="ファイル拡張子:")
         self._widgets["ext_label"].pack(side=tk.LEFT)
-        self.ext_var = tk.StringVar(value=".sql,.pls,.pkb,.pks,.trg,.vw,.fnc,.prc")
+        self.ext_var = tk.StringVar(value=",".join(self.cfg.file_extensions))
         ext_entry = ttk.Entry(settings_frame, textvariable=self.ext_var, width=40)
         ext_entry.pack(side=tk.LEFT, padx=5)
 
@@ -216,14 +276,15 @@ class Oracle2PostgreSQLApp:
         self._widgets["options_frame"].pack(fill=tk.X, pady=5)
 
         opts = self._widgets["options_frame"]
-        self.opt_datatypes = tk.BooleanVar(value=True)
-        self.opt_plsql = tk.BooleanVar(value=True)
-        self.opt_sequences = tk.BooleanVar(value=True)
-        self.opt_synonyms = tk.BooleanVar(value=True)
-        self.opt_packages = tk.BooleanVar(value=True)
-        self.opt_triggers = tk.BooleanVar(value=True)
-        self.opt_report = tk.BooleanVar(value=True)
-        self.opt_backup = tk.BooleanVar(value=True)
+        ct = self.cfg.category_toggles
+        self.opt_datatypes = tk.BooleanVar(value=ct.get("DATATYPE", True))
+        self.opt_plsql = tk.BooleanVar(value=ct.get("PLSQL", True))
+        self.opt_sequences = tk.BooleanVar(value=ct.get("SEQUENCE", True))
+        self.opt_synonyms = tk.BooleanVar(value=ct.get("SYNONYM", True))
+        self.opt_packages = tk.BooleanVar(value=ct.get("PLSQL", True))
+        self.opt_triggers = tk.BooleanVar(value=ct.get("TRIGGER", True))
+        self.opt_report = tk.BooleanVar(value=self.cfg.report_html or self.cfg.report_csv)
+        self.opt_backup = tk.BooleanVar(value=self.cfg.create_backup)
 
         self._widgets["cb_datatypes"] = ttk.Checkbutton(opts, text="データ型変換",
                                                           variable=self.opt_datatypes)
@@ -292,6 +353,8 @@ class Oracle2PostgreSQLApp:
         self._widgets["output_label"].configure(text=t("output_folder"))
         self._widgets["input_browse"].configure(text=t("browse"))
         self._widgets["output_browse"].configure(text=t("browse"))
+        self._widgets["config_label"].configure(text=t("config_file") if self.i18n.has_key("config_file") else "Config file:")
+        self._widgets["config_browse"].configure(text=t("browse"))
         self._widgets["encoding_label"].configure(text=t("encoding"))
         self._widgets["ext_label"].configure(text=t("file_extensions"))
         self._widgets["options_frame"].configure(text=t("options"))
@@ -322,9 +385,42 @@ class Oracle2PostgreSQLApp:
         if path:
             self.output_var.set(path)
 
+    def _browse_config(self):
+        path = filedialog.askopenfilename(
+            title="Select Configuration File",
+            filetypes=[("YAML files", "*.yaml *.yml"), ("All files", "*.*")],
+        )
+        if path:
+            self.config_var.set(path)
+            self._reload_config(path)
+
+    def _reload_config(self, config_path: str):
+        """Reload config from file and update GUI widgets."""
+        try:
+            self.cfg = load_config(config_path)
+            ct = self.cfg.category_toggles
+            self.opt_datatypes.set(ct.get("DATATYPE", True))
+            self.opt_plsql.set(ct.get("PLSQL", True))
+            self.opt_sequences.set(ct.get("SEQUENCE", True))
+            self.opt_synonyms.set(ct.get("SYNONYM", True))
+            self.opt_packages.set(ct.get("PLSQL", True))
+            self.opt_triggers.set(ct.get("TRIGGER", True))
+            self.opt_backup.set(self.cfg.create_backup)
+            self.opt_report.set(self.cfg.report_html or self.cfg.report_csv)
+            self.encoding_var.set(self.cfg.input_encoding)
+            self.ext_var.set(",".join(self.cfg.file_extensions))
+            self._log(f"Config loaded: {config_path}", "success")
+        except Exception as e:
+            self._log(f"Config error: {e}", "error")
+
     def _log(self, message: str, tag: str = "info"):
         self.log_text.insert(tk.END, message + "\n", tag)
         self.log_text.see(tk.END)
+        # Also log to file
+        if tag == "error":
+            self._mlog.error(message)
+        else:
+            self._mlog.info(message)
 
     def _start_conversion(self):
         input_dir = self.input_var.get().strip()
@@ -374,8 +470,11 @@ class Oracle2PostgreSQLApp:
 
             parser = OracleParser(encoding=encoding)
             transformer = PostgresTransformer(options)
-            generator = PostgresCodeGenerator(output_dir, encoding=encoding)
-            backup_mgr = BackupManager() if options.create_backup else None
+            generator = PostgresCodeGenerator(
+                output_dir, encoding=self.cfg.output_encoding,
+                add_header=self.cfg.add_header, suffix=self.cfg.output_suffix,
+            )
+            backup_mgr = BackupManager(self.cfg.backup_dir) if options.create_backup else None
 
             # Find files
             sql_files = []
@@ -389,6 +488,7 @@ class Oracle2PostgreSQLApp:
                                 t("log_error", message="No matching files found"), "error")
                 return
 
+            self._mlog.start_migration(len(sql_files))
             self.root.after(0, self._log, f"  Files: {len(sql_files)}", "info")
             results = []
 
@@ -407,23 +507,36 @@ class Oracle2PostgreSQLApp:
 
                 # Parse
                 self.root.after(0, self._log, t("log_parsing", file=fname), "info")
+                self._mlog.start_file(fname)
                 schema = parser.parse_file(filepath)
 
                 if schema.errors:
                     for err in schema.errors:
                         self.root.after(0, self._log,
                                          t("log_warning", message=err), "warning")
+                        self._mlog.parse_warning(fname, 0, err)
 
                 # Transform
                 self.root.after(0, self._log, t("log_transforming", file=fname), "info")
+                self._mlog.transform_file(fname)
                 result = transformer.transform(schema)
+
+                # Log rule applications to file
+                for change in result.changes:
+                    self._mlog.rule_applied(
+                        change.rule_id, change.category, change.severity,
+                        change.description, fname, change.line_number,
+                    )
 
                 # Generate
                 self.root.after(0, self._log, t("log_generating", file=fname), "info")
-                generator.generate(result)
+                out_path = generator.generate(result)
+                self._mlog.generate_file(fname, os.path.basename(out_path))
                 results.append(result)
 
                 # Status
+                self._mlog.file_result(fname, result.auto_converted,
+                                        result.needs_review, result.manual_only)
                 status = (f"  Auto: {result.auto_converted}, "
                           f"Review: {result.needs_review}, "
                           f"Manual: {result.manual_only}")
@@ -437,6 +550,8 @@ class Oracle2PostgreSQLApp:
                 total_review = sum(r.needs_review for r in results)
                 total_manual = sum(r.manual_only for r in results)
 
+                self._mlog.finish_migration(len(results), total_auto,
+                                             total_review, total_manual)
                 self.root.after(0, self._log,
                                  t("log_complete", total=len(results),
                                    auto=total_auto, review=total_review,
@@ -444,12 +559,14 @@ class Oracle2PostgreSQLApp:
 
                 # Generate report
                 if options.generate_report and results:
-                    report_gen = ReportGenerator(output_dir, lang=self.i18n.lang_code)
+                    report_lang = self.cfg.report_language or self.i18n.lang_code
+                    report_gen = ReportGenerator(output_dir, lang=report_lang)
                     report_paths = report_gen.generate(results)
                     self.root.after(0, self._log,
                                      f"  Report: {report_paths['html']}", "success")
 
         except Exception as e:
+            self._mlog.error(str(e), exc_info=True)
             self.root.after(0, self._log,
                              self.i18n.t("log_error", message=str(e)), "error")
         finally:
@@ -468,10 +585,13 @@ def main():
     )
     parser.add_argument("-i", "--input", help="Input directory containing Oracle SQL files")
     parser.add_argument("-o", "--output", help="Output directory for PostgreSQL files")
-    parser.add_argument("-e", "--encoding", default="utf-8", help="File encoding (default: utf-8)")
-    parser.add_argument("--extensions", default=".sql,.pls,.pkb,.pks,.trg,.vw,.fnc,.prc",
-                         help="Comma-separated file extensions to process")
-    parser.add_argument("--lang", default="en", help="Language for output (default: en)")
+    parser.add_argument("-c", "--config", default="config.yaml",
+                         help="Path to config.yaml (default: config.yaml)")
+    parser.add_argument("-e", "--encoding", default=None,
+                         help="File encoding (overrides config)")
+    parser.add_argument("--extensions", default=None,
+                         help="Comma-separated file extensions (overrides config)")
+    parser.add_argument("--lang", default=None, help="Language (overrides config)")
     parser.add_argument("--no-datatypes", action="store_true", help="Skip data type conversion")
     parser.add_argument("--no-plsql", action="store_true", help="Skip PL/SQL conversion")
     parser.add_argument("--no-sequences", action="store_true", help="Skip sequence conversion")
@@ -486,8 +606,15 @@ def main():
     if args.input and args.output:
         run_cli(args)
     else:
+        # Load config for GUI if available
+        cfg = None
+        if os.path.isfile(args.config):
+            try:
+                cfg = load_config(args.config)
+            except Exception:
+                pass
         root = tk.Tk()
-        app = Oracle2PostgreSQLApp(root)
+        app = Oracle2PostgreSQLApp(root, cfg=cfg)
         root.mainloop()
 
 
