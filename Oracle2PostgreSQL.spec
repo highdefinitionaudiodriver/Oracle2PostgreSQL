@@ -5,8 +5,11 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[],
-    hiddenimports=[],
+    datas=[
+        ('config.yaml', '.'),
+        ('samples', 'samples'),
+    ],
+    hiddenimports=['yaml'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
