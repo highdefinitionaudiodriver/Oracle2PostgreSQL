@@ -1,16 +1,42 @@
 # Oracle2PostgreSQL
 
-**AST ベースの Oracle → PostgreSQL SQL 自動移行ツール**
+**Oracle → PostgreSQL 移行前の SQL / PL/SQL 資産診断・変換支援ツール**
 
-Oracle SQL / PL-SQL ファイルを構文解析し、80 以上の変換ルールで PostgreSQL 互換の SQL へ自動変換します。
-GUI（Tkinter）・CLI・Docker の 3 モードに対応し、HTML / CSV の移行レポートを生成します。
+Oracle SQL / PL/SQL ファイルを構文解析し、80 以上の変換ルールで PostgreSQL 互換 SQL への変換候補を生成します。
+GUI（Tkinter）・CLI・Docker の 3 モードに対応し、変換可能箇所・要レビュー箇所・手修正が必要な箇所を HTML / CSV レポートとして可視化します。
+
+> Oracle ライセンス削減、クラウド移行、ベンダーロックイン回避を検討する企業向けに、移行前の資産棚卸し・難易度評価・概算工数見積もりを支援します。
+
+---
+
+## 🎯 これは何？（30秒で）
+
+- **誰のため**：Oracle DB を運用している社内 SE・DBA／クラウド移行（Aurora PostgreSQL 等）を検討中の情シス／SI ベンダーのアセスメント担当
+- **何が解決される**：Oracle→PostgreSQL 移行の **事前工数見積もりを「2週間の手作業」から「数時間の自動レポート」** に短縮。AWS SCT で漏れる PL/SQL の手修正範囲を可視化
+- **なぜ既存ツールではダメか**：AWS SCT・ora2pg 等は変換そのものに寄っており、**「上司に出せる移行リスク評価レポート」** が出ない。本ツールは HTML/CSV で **未対応構文 Top N・難易度スコア・概算工数** を出力
+- **使う条件**：Python 3.10+ / Windows・macOS・Linux／GUI・CLI・Docker いずれも可
+
+## 💰 想定ユースケース・価格帯
+
+| 用途 | 形態 |
+|---|---|
+| OSS としての利用（自社内で診断ツールを回す） | 無料（MIT） |
+| 100 ファイル規模の **診断レポート受託**（A4 PDF 納品） | 応相談（数万円〜） |
+| エンタープライズ移行案件の **アセスメント支援**（追加ルール・カスタム変換） | 個別見積もり |
 
 ---
 
 ## Overview / 概要
 
-データベースを Oracle から PostgreSQL へ移行する際、大量の DDL・DML・PL/SQL を手作業で書き換えるのは膨大な労力を要します。
-**Oracle2PostgreSQL** は、この変換作業を自動化するために開発された Python 製のツールです。
+データベースを Oracle から PostgreSQL へ移行する際、大量の DDL・DML・PL/SQL を手作業で棚卸し、変換可否を判断するには膨大な労力を要します。
+**Oracle2PostgreSQL** は、この初期診断と変換たたき台作成を支援する Python 製ツールです。
+
+### Business Use / 活用シーン
+
+- Oracle 脱却・PostgreSQL 移行の初期調査
+- SQL / PL/SQL 資産の変換率、リスク、手修正ポイントの可視化
+- 移行プロジェクトの概算工数・見積もり資料作成
+- AWS SCT / DMS などの標準移行ツールで残る複雑な SQL の事前洗い出し
 
 ### なぜ AST ベースなのか
 
@@ -502,3 +528,11 @@ pytest test_conversion.py -v -k "test_function_oracle_func"
 MIT License
 
 Copyright (c) 2026 Oracle2PostgreSQL Contributors
+
+---
+
+## 🤝 商用利用・カスタマイズ依頼
+
+- 個人・社内利用は無料（MIT ライセンス）
+- 移行アセスメント受託、A4 PDF 診断レポート作成、独自変換ルール追加、Oracle 12c/19c/21c の特殊構文対応は応相談
+- 連絡先：highdefinitionaudiodriver@gmail.com
