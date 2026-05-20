@@ -2,6 +2,7 @@
 Oracle2PostgreSQL - Oracle to PostgreSQL Migration Tool
 GUI (Tkinter) + CLI dual-mode interface.
 """
+from __future__ import annotations
 
 import argparse
 import os
@@ -10,8 +11,12 @@ import threading
 import time
 from pathlib import Path
 
-import tkinter as tk
-from tkinter import ttk, filedialog, scrolledtext
+try:
+    import tkinter as tk
+    from tkinter import ttk, filedialog, scrolledtext
+    _GUI_AVAILABLE = True
+except ImportError:
+    _GUI_AVAILABLE = False
 
 from src.oracle_parser import OracleParser
 from src.postgres_transformer import PostgresTransformer, TransformOptions, TransformResult
@@ -606,6 +611,13 @@ def main():
     if args.input and args.output:
         run_cli(args)
     else:
+        if not _GUI_AVAILABLE:
+            print(
+                "ERROR: tkinter is not available in this environment.\n"
+                "Use CLI mode: oracle2pg -i <input_dir> -o <output_dir>",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         # Load config for GUI if available
         cfg = None
         if os.path.isfile(args.config):
