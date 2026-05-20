@@ -45,4 +45,5 @@ FROM base AS test
 COPY test_conversion.py .
 COPY samples/ ./samples/
 
-CMD ["python", "-m", "pytest", "test_conversion.py", "-v", "--tb=short"]
+ENTRYPOINT ["python", "-m", "pytest"]
+CMD ["test_conversion.py", "-v", "--tb=short"]
