@@ -26,6 +26,21 @@ GUI（Tkinter）・CLI・Docker の 3 モードに対応し、変換可能箇所
 
 ---
 
+## 🎬 デモ / まず見るもの
+
+<!-- docs/demo.gif に「Oracle SQLフォルダ選択 → 診断実行 → HTML/CSVレポート確認」までの30秒デモGIFを配置してください。 -->
+![Oracle2PostgreSQL demo](docs/demo.gif)
+
+移行前アセスメントだけを素早く見せる場合：
+
+```bash
+python scripts/diagnose.py examples/sample_oracle_app --html oracle_migration_summary.html
+```
+
+出力される HTML / CSV は、営業提案・稟議・見積もり前の初期判断資料として使えます。
+
+---
+
 ## Overview / 概要
 
 データベースを Oracle から PostgreSQL へ移行する際、大量の DDL・DML・PL/SQL を手作業で棚卸し、変換可否を判断するには膨大な労力を要します。
