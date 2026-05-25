@@ -551,3 +551,20 @@ Copyright (c) 2026 Oracle2PostgreSQL Contributors
 - 個人・社内利用は無料（MIT ライセンス）
 - 移行アセスメント受託、A4 PDF 診断レポート作成、独自変換ルール追加、Oracle 12c/19c/21c の特殊構文対応は応相談
 - 連絡先：highdefinitionaudiodriver@gmail.com
+
+<!-- CODEX-CURRENT-STATUS:START -->
+## 現状サマリ (2026-05-25)
+
+- 対象: Oracle2PostgreSQL
+- 作業ブランチ: main
+- README更新時点の参照コミット: 40d7fbc fix(docker): testステージのENTRYPOINTをpytestに上書きしてCIを修正
+- Python プロジェクト。pyproject.toml を起点に依存関係とツール設定を管理。
+- Python 実行環境向けに requirements.txt を同梱。
+- Dockerfile を同梱し、コンテナ実行・検証に展開可能。
+- docker-compose.yml を同梱し、ローカル統合検証に展開可能。
+- docs ディレクトリ配下に設計・運用・補足資料を配置。
+- src ディレクトリ配下に主要実装を配置。
+- 主要な確認コマンド: python -m pytest または README 記載の Python コマンド
+- 次に進めるなら、README 内の利用手順と既存 docs / tests を起点に、未整備の検証手順・引き継ぎメモ・CI 化を補強する。
+<!-- CODEX-CURRENT-STATUS:END -->
+
