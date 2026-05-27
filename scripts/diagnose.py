@@ -285,76 +285,381 @@ def write_html(diags: list[FileDiagnostic], out_path: Path) -> None:
     detail_rows = "".join(
         f"<tr><td>{html.escape(d.relative_path)}</td>"
         f"<td>{d.loc}</td>"
-        f"<td class='cat-{d.category.lower()}'><strong>{d.category}</strong></td>"
+        f"<td><span class='badge cat-{d.category.lower()}'>{d.category}</span></td>"
         f"<td>{d.weighted_effort_min:.0f} 分</td>"
-        f"<td>{html.escape('; '.join(f'{nm}×{cn}' for nm, cn in d.top_findings))}</td></tr>"
+        f"<td class='findings-cell'>{html.escape('; '.join(f'{nm}×{cn}' for nm, cn in d.top_findings))}</td></tr>"
         for d in sorted(diags, key=lambda x: x.weighted_effort_min, reverse=True)[:20]
     )
 
     body = f"""<!DOCTYPE html>
-<html lang="ja"><head><meta charset="UTF-8"><title>Oracle → PostgreSQL 移行 事前診断レポート</title>
-<style>
-  body {{ font-family: "Yu Gothic UI", "Hiragino Sans", sans-serif; max-width: 900px; margin: 20px auto; padding: 0 18px; color: #222; }}
-  h1 {{ font-size: 22px; border-bottom: 3px solid #1976d2; padding-bottom: 6px; }}
-  h2 {{ font-size: 16px; margin-top: 28px; color: #1976d2; }}
-  .kpi {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }}
-  .kpi-box {{ padding: 14px; background: #f5f5f5; border-radius: 6px; text-align: center; }}
-  .kpi-box .big {{ font-size: 24px; font-weight: bold; }}
-  .kpi-box .label {{ font-size: 11px; color: #666; margin-top: 2px; }}
-  .cat-auto {{ color: #2e7d32; }}
-  .cat-review {{ color: #ef6c00; }}
-  .cat-manual {{ color: #c62828; }}
-  table {{ width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }}
-  th, td {{ border-bottom: 1px solid #ddd; padding: 6px 8px; text-align: left; }}
-  th {{ background: #fafafa; }}
-  .summary-bar {{ height: 24px; display: flex; margin: 8px 0 16px; border-radius: 4px; overflow: hidden; font-size: 11px; color: #fff; text-align: center; line-height: 24px; }}
-  .seg-auto {{ background: #4caf50; }}
-  .seg-review {{ background: #ff9800; }}
-  .seg-manual {{ background: #e53935; }}
-  .meta {{ font-size: 11px; color: #888; margin-top: 24px; padding-top: 12px; border-top: 1px solid #eee; }}
-</style></head><body>
-<h1>Oracle → PostgreSQL 移行 事前診断レポート</h1>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Oracle → PostgreSQL 移行 事前診断レポート</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {{
+      --primary-color: #1e40af;
+      --primary-gradient: linear-gradient(135deg, #1e40af, #1e3a8a);
+      --bg-color: #f8fafc;
+      --card-bg: #ffffff;
+      --text-color: #1e293b;
+      --text-muted: #64748b;
+      --border-color: #e2e8f0;
+      
+      --color-auto: #15803d;
+      --bg-auto: #dcfce7;
+      --color-review: #c2410c;
+      --bg-review: #ffedd5;
+      --color-manual: #b91c1c;
+      --bg-manual: #fee2e2;
+    }}
+    
+    body {{
+      font-family: 'Inter', 'Noto Sans JP', sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      line-height: 1.6;
+      margin: 0;
+      padding: 40px 20px;
+    }}
+    
+    .container {{
+      max-width: 1000px;
+      margin: 0 auto;
+    }}
+    
+    header {{
+      background: var(--primary-gradient);
+      color: #ffffff;
+      padding: 35px 40px;
+      border-radius: 16px;
+      margin-bottom: 30px;
+      box-shadow: 0 10px 25px -5px rgba(30, 64, 175, 0.15);
+      position: relative;
+      overflow: hidden;
+    }}
+    
+    header::after {{
+      content: "";
+      position: absolute;
+      top: -50%;
+      right: -20%;
+      width: 400px;
+      height: 400px;
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 50%;
+    }}
+    
+    .badge-report {{
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.2);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+    }}
+    
+    header h1 {{
+      margin: 0;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }}
+    
+    header .subtitle {{
+      margin-top: 8px;
+      font-size: 14px;
+      opacity: 0.9;
+      font-weight: 300;
+    }}
+    
+    .kpi-grid {{
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-bottom: 30px;
+    }}
+    
+    .kpi-card {{
+      background: var(--card-bg);
+      padding: 24px;
+      border-radius: 16px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+      border: 1px solid var(--border-color);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }}
+    
+    .kpi-card:hover {{
+      transform: translateY(-2px);
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }}
+    
+    .kpi-val {{
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--primary-color);
+      line-height: 1.2;
+    }}
+    
+    .kpi-label {{
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 6px;
+      font-weight: 600;
+    }}
+    
+    section {{
+      background: var(--card-bg);
+      padding: 35px 40px;
+      border-radius: 16px;
+      margin-bottom: 30px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+      border: 1px solid var(--border-color);
+    }}
+    
+    section h2 {{
+      font-size: 18px;
+      font-weight: 700;
+      margin-top: 0;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid #f1f5f9;
+      color: var(--text-color);
+    }}
+    
+    .summary-bar {{
+      height: 28px;
+      display: flex;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
+      margin-bottom: 20px;
+    }}
+    
+    .summary-bar > div {{
+      line-height: 28px;
+      color: #ffffff;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+      transition: width 0.3s ease;
+    }}
+    
+    .seg-auto {{ background-color: #22c55e; }}
+    .seg-review {{ background-color: #f97316; }}
+    .seg-manual {{ background-color: #ef4444; }}
+    
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+      text-align: left;
+    }}
+    
+    th {{
+      font-weight: 600;
+      color: var(--text-color);
+      border-bottom: 2px solid var(--border-color);
+      padding: 12px 16px;
+      background-color: #f8fafc;
+    }}
+    
+    td {{
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border-color);
+      color: #334155;
+    }}
+    
+    tr:hover td {{
+      background-color: #f8fafc;
+    }}
+    
+    .badge {{
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      text-align: center;
+    }}
+    
+    .cat-auto {{ color: var(--color-auto); background-color: var(--bg-auto); }}
+    .cat-review {{ color: var(--color-review); background-color: var(--bg-review); }}
+    .cat-manual {{ color: var(--color-manual); background-color: var(--bg-manual); }}
+    
+    .findings-cell {{
+      color: var(--text-muted);
+      font-size: 12.5px;
+    }}
+    
+    .meta-box {{
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border-color);
+      text-align: center;
+      line-height: 1.8;
+    }}
+    
+    @media (max-width: 768px) {{
+      .kpi-grid {{
+        grid-template-columns: 1fr;
+      }}
+      body {{
+        padding: 20px 10px;
+      }}
+      section {{
+        padding: 25px 20px;
+      }}
+    }}
+    
+    @media print {{
+      body {{
+        background-color: #ffffff;
+        padding: 0;
+      }}
+      .container {{
+        max-width: 100%;
+      }}
+      header {{
+        background: none !important;
+        color: #000000 !important;
+        border: 1px solid var(--border-color);
+        box-shadow: none !important;
+        padding: 20px;
+      }}
+      header .subtitle {{
+        color: #334155;
+      }}
+      .badge-report {{
+        border: 1px solid #64748b;
+        color: #000000;
+      }}
+      .kpi-card {{
+        border: 1px solid var(--border-color);
+        box-shadow: none !important;
+      }}
+      section {{
+        border: 1px solid var(--border-color);
+        box-shadow: none !important;
+        page-break-inside: avoid;
+      }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="badge-report">Pre-migration Assessment</div>
+      <h1>Oracle → PostgreSQL 移行 事前診断レポート</h1>
+      <div class="subtitle">データベーススキーマおよび SQL 資産の移行容易性分析</div>
+    </header>
 
-<div class="kpi">
-  <div class="kpi-box"><div class="big">{agg['file_count']}</div><div class="label">対象 SQL ファイル数</div></div>
-  <div class="kpi-box"><div class="big">{agg['total_loc']:,}</div><div class="label">合計行数（コメント除外）</div></div>
-  <div class="kpi-box"><div class="big">{agg['total_effort_pd']}</div><div class="label">概算工数（人日）</div></div>
-</div>
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-val">{agg['file_count']}</div>
+        <div class="kpi-label">対象 SQL ファイル数</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-val">{agg['total_loc']:,}</div>
+        <div class="kpi-label">合計行数（コメント除外）</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-val">{agg['total_effort_pd']}</div>
+        <div class="kpi-label">概算工数（人日）</div>
+      </div>
+    </div>
 
-<h2>変換可否の分布</h2>
-<div class="summary-bar">
-  <div class="seg-auto" style="width: {pct(auto_c)}%">AUTO {auto_c}</div>
-  <div class="seg-review" style="width: {pct(review_c)}%">REVIEW {review_c}</div>
-  <div class="seg-manual" style="width: {pct(manual_c)}%">MANUAL {manual_c}</div>
-</div>
-<table>
-  <thead><tr><th>カテゴリ</th><th>意味</th><th>ファイル数</th><th>構成比</th></tr></thead>
-  <tbody>
-    <tr><td class="cat-auto"><strong>AUTO</strong></td><td>自動変換でほぼ完了。レビュー軽微。</td><td>{auto_c}</td><td>{pct(auto_c)}%</td></tr>
-    <tr><td class="cat-review"><strong>REVIEW</strong></td><td>構文変換は可能だが、意味の確認・テスト必須。</td><td>{review_c}</td><td>{pct(review_c)}%</td></tr>
-    <tr><td class="cat-manual"><strong>MANUAL</strong></td><td>PACKAGE / DBMS_* / 設計レベルの作り直しが必要。</td><td>{manual_c}</td><td>{pct(manual_c)}%</td></tr>
-  </tbody>
-</table>
+    <section>
+      <h2>変換可否の分布</h2>
+      <div class="summary-bar">
+        <div class="seg-auto" style="width: {pct(auto_c)}%">AUTO {pct(auto_c)}%</div>
+        <div class="seg-review" style="width: {pct(review_c)}%">REVIEW {pct(review_c)}%</div>
+        <div class="seg-manual" style="width: {pct(manual_c)}%">MANUAL {pct(manual_c)}%</div>
+      </div>
+      
+      <table>
+        <thead>
+          <tr>
+            <th>カテゴリ</th>
+            <th>説明</th>
+            <th>ファイル数</th>
+            <th>構成比</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="badge cat-auto">AUTO</span></td>
+            <td>自動変換でほぼ完了。レビュー軽微。</td>
+            <td>{auto_c}</td>
+            <td>{pct(auto_c)}%</td>
+          </tr>
+          <tr>
+            <td><span class="badge cat-review">REVIEW</span></td>
+            <td>構文変換は可能だが、意味の確認・テスト必須。</td>
+            <td>{review_c}</td>
+            <td>{pct(review_c)}%</td>
+          </tr>
+          <tr>
+            <td><span class="badge cat-manual">MANUAL</span></td>
+            <td>PACKAGE / DBMS_* / 設計レベルの作り直しが必要。</td>
+            <td>{manual_c}</td>
+            <td>{pct(manual_c)}%</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
 
-<h2>未対応構文 Top 10（移行を阻む主因）</h2>
-<table>
-  <thead><tr><th>#</th><th>構文・関数</th><th>検出件数</th></tr></thead>
-  <tbody>{top_rows or '<tr><td colspan="3">該当なし</td></tr>'}</tbody>
-</table>
+    <section>
+      <h2>未対応構文 Top 10（移行を阻む主因）</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 60px;">#</th>
+            <th>構文・関数</th>
+            <th>検出件数</th>
+          </tr>
+        </thead>
+        <tbody>
+          {top_rows or '<tr><td colspan="3">該当なし</td></tr>'}
+        </tbody>
+      </table>
+    </section>
 
-<h2>難易度の高いファイル Top 20（工数集中ポイント）</h2>
-<table>
-  <thead><tr><th>ファイル</th><th>LOC</th><th>カテゴリ</th><th>概算工数</th><th>主な検出</th></tr></thead>
-  <tbody>{detail_rows or '<tr><td colspan="5">該当なし</td></tr>'}</tbody>
-</table>
+    <section>
+      <h2>難易度の高いファイル Top 20（工数集中ポイント）</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>ファイル</th>
+            <th style="width: 80px;">LOC</th>
+            <th style="width: 100px;">カテゴリ</th>
+            <th style="width: 100px;">概算工数</th>
+            <th>主な検出</th>
+          </tr>
+        </thead>
+        <tbody>
+          {detail_rows or '<tr><td colspan="5">該当なし</td></tr>'}
+        </tbody>
+      </table>
+    </section>
 
-<p class="meta">
-⚠️ 本レポートは <strong>静的解析による事前見積もりの叩き台</strong> です。
-COPY / DB Link / ライブラリ拡張・DDL の解析は含まれていません。
-最終工数は人手レビューで確定し、テスト工数を別途加算してください。<br>
-生成: {datetime.now().isoformat(timespec='seconds')} / Oracle2PostgreSQL diagnose.py
-</p>
-</body></html>"""
+    <div class="meta-box">
+      ⚠️ 本レポートは <strong>静的解析による事前見積もりの叩き台</strong> です。<br>
+      COPY / DB Link / ライブラリ拡張・DDL の解析は含まれていません。<br>
+      最終工数は人手レビューで確定し、テスト工数を別途加算してください。<br>
+      生成: {datetime.now().isoformat(timespec='seconds')} / Oracle2PostgreSQL diagnose.py
+    </div>
+  </div>
+</body>
+</html>"""
     out_path.write_text(body, encoding="utf-8")
 
 
