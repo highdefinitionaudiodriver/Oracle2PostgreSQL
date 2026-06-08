@@ -1,0 +1,12 @@
+（窓の杜 リリース情報フォーム宛 / 送信先・本文は窓の杜の最新の投稿要領を確認のこと）
+
+【ソフト名称】Oracle2PostgreSQL - DB移行ツール
+【バージョン】0.1.0
+【公開日】26/06/08
+【著作権者名】highdefinitionaudiodriver
+【ソフト種別】フリーソフト（無料）
+【ソフト紹介ページのURL】https://github.com/highdefinitionaudiodriver/Oracle2PostgreSQL
+【ダウンロードページのURL】https://github.com/highdefinitionaudiodriver/Oracle2PostgreSQL/releases/latest
+
+--- 補足（フォームに紹介文欄がある場合）---
+Oracle → PostgreSQL 移行前の SQL / PL/SQL 資産診断・変換支援ツール

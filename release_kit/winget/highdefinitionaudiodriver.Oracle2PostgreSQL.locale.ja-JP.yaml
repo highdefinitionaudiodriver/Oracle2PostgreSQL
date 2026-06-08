@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: highdefinitionaudiodriver.Oracle2PostgreSQL
+PackageVersion: 0.1.0
+PackageLocale: ja-JP
+Publisher: highdefinitionaudiodriver
+PublisherUrl: https://github.com/highdefinitionaudiodriver
+PackageName: Oracle2PostgreSQL - DB移行ツール
+PackageUrl: https://github.com/highdefinitionaudiodriver/Oracle2PostgreSQL
+License: MIT
+ShortDescription: Oracle → PostgreSQL 移行前の SQL / PL/SQL 資産診断・変換支援ツール
+Moniker: oracle2postgresql
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0
